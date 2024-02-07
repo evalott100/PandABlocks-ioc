@@ -7,6 +7,8 @@ from typing import Any, Awaitable, Callable, List, NewType, Optional, Union
 from pandablocks.responses import FieldInfo
 from softioc import builder
 from softioc.pythonSoftIoc import RecordWrapper
+from pydantic import BaseModel, Field, field_validator
+from pydantic.alias_generators import to_pascal, to_snake
 
 
 class InErrorException(Exception):
@@ -17,57 +19,104 @@ class InErrorException(Exception):
 ScalarRecordValue = Union[str, InErrorException]
 TableRecordValue = List[str]
 RecordValue = Union[ScalarRecordValue, TableRecordValue]
-# EPICS format, i.e. ":" dividers
-EpicsName = NewType("EpicsName", str)
-# PandA format, i.e. "." dividers
-PandAName = NewType("PandAName", str)
-# No dividers and PascalCase
-PviName = NewType("PviName", str)
 
 
-def panda_to_epics_name(field_name: PandAName) -> EpicsName:
-    """Convert PandA naming convention to EPICS convention. This module defaults to
-    EPICS names internally, only converting back to PandA names when necessary."""
-    return EpicsName(field_name.replace(".", ":"))
+class EpicsName(BaseModel):
+    """EPICS format, i.e. ":" dividers"""
+    name: str = Field(pattern=r"^[\w:-]+$")
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def __init__(cls, value: str | BaseModel):
+        match value:
+            case str():
+                cls.name = value
+            case EpicsName():
+                cls.name = value.name
+            case PviName():
+                raise NotImplementedError()
+            case PandAName():
+                cls.name = value.name.replace(".", ":")
+            case _:
+                raise ValueError(
+                    f"name={value} of an unknown type {type(value)}, "
+                    "expecting EpicsName, PandAName or PviName"
+                )
+
+    def __str__(self):
+        return self.name
 
 
-def epics_to_panda_name(field_name: EpicsName) -> PandAName:
-    """Convert EPICS naming convention to PandA convention. This module defaults to
-    EPICS names internally, only converting back to PandA names when necessary."""
-    return PandAName(field_name.replace(":", "."))
+class PandAName(BaseModel):
+    """PandA format, i.e. "." dividers"""
+    name: str = Field(pattern=r"^[A-Za-z0-9]+$")
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def validator(cls, value: str | BaseModel):
+        match value:
+            case str():
+                cls.name = value
+            case EpicsName():
+                field_name = value.name
+                if field_name.endswith(":LABEL"):
+                        # Field is the label for the block, which is stored in the special
+                        # *METADATA area
+
+                        block_name = field_name.split(":")[-2]
+                        if not block_name[-1].isdigit():
+                            block_name += "1"
+
+                        record_name = f"*METADATA.LABEL_{block_name}"
+                else:
+                    _, record_name = field_name.split(":", maxsplit=1)
+
+                cls.name = value.name.replace(":", ".")
+            case PviName():
+                raise NotImplementedError()
+            case PandAName():
+                cls.name = value.name
+            case _:
+                raise ValueError(
+                    f"name={value} of an unknown type {type(value)}, "
+                    "expecting EpicsName, PandAName or PviName"
+                )
+
+    def __str__(self):
+        return self.name
 
 
-def epics_to_pvi_name(field_name: EpicsName) -> PviName:
-    """Converts EPICS naming convention to PVI naming convention.
-    For example PANDA:PCAP:TRIG_EDGE -> TrigEdge."""
-    relevant_section = field_name.split(":")[-1]
-    words = relevant_section.replace("-", "_").split("_")
-    capitalised_word = "".join(word.capitalize() for word in words)
+class PviName(BaseModel):
+    """No dividers and PascalCase"""
+    name: str = Field(pattern=r"^[A-Za-z0-9]+$")
 
-    # We don't want to allow any non-alphanumeric characters.
-    formatted_word = re.search(r"[A-Za-z0-9]+", capitalised_word)
-    assert formatted_word
+    @field_validator("name", mode="before")
+    @classmethod
+    def validator(cls, value: str | BaseModel):
+        match value:
+            case str():
+                cls.name = value
+            case EpicsName():
+                relevant_section = value.name.split(":")[-1]
+                words = relevant_section.replace("-", "_").split("_")
+                capitalised_word = "".join(word.capitalize() for word in words)
 
-    return PviName(formatted_word.group())
+                # We don't want to allow any non-alphanumeric characters.
+                formatted_word = re.search(r"[A-Za-z0-9]+", capitalised_word)
+                assert formatted_word
+                cls.name = formatted_word.group()
+            case PviName():
+                cls.name = value.name
+            case PandAName():
+                raise NotImplementedError()
+            case _:
+                raise ValueError(
+                    f"value={value} of an unknown type {type(value)}, "
+                    "expecting EpicsName, PandAName or PviName"
+                )
 
-
-def device_and_record_to_panda_name(field_name: EpicsName) -> PandAName:
-    """Convert an EPICS naming convention (including Device prefix) to PandA
-    convention."""
-
-    if field_name.endswith(":LABEL"):
-        # Field is the label for the block, which is stored in the special
-        # *METADATA area
-
-        block_name = field_name.split(":")[-2]
-        if not block_name[-1].isdigit():
-            block_name += "1"
-
-        record_name = f"*METADATA.LABEL_{block_name}"
-    else:
-        _, record_name = field_name.split(":", maxsplit=1)
-
-    return epics_to_panda_name(EpicsName(record_name))
+    def __str__(self):
+        return self.name
 
 
 def check_num_labels(labels: List[str], record_name: str):
