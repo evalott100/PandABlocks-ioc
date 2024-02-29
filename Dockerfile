@@ -8,10 +8,8 @@ FROM  ${REGISTRY}/epics-base-linux-developer:${BASE} AS developer
 ARG PIP_OPTIONS=.
 
 # The build stage installs the context into the venv
-FROM developer as build
 COPY . /context
 WORKDIR /context
-RUN pip install .
 
 # install python package into /venv
 RUN pip install ${PIP_OPTIONS}
