@@ -28,22 +28,24 @@ jobs:
           # Need this to get version number from last tag
           fetch-depth: 0
 
-      - if: inputs.python-version == 'dev'
-        name: Install dev versions of python packages
+      - if: inputs.python-version == 'dev_container'
+        name: Install dev_container versions of python packages
         uses: ./.github/actions/install_requirements
+        with:
+          docker-image: : ${{ github.event.inputs.docker-image }}
 
-      - if: inputs.python-version == 'dev'
+      - if: inputs.python-version == 'dev_container'
         name: Write the requirements as an artifact
         run: pip freeze --exclude-editable > /tmp/dev-requirements.txt
 
-      - if: inputs.python-version == 'dev'
+      - if: inputs.python-version == 'dev_container'
         name: Upload dev-requirements.txt
         uses: actions/upload-artifact@v4
         with:
           name: dev-requirements
           path: /tmp/dev-requirements.txt
 
-      - if: inputs.python-version != 'dev'
+      - if: inputs.python-version != 'dev_container'
         name: Install latest versions of python packages
         uses: ./.github/actions/install_requirements
         with:

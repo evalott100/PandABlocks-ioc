@@ -3,31 +3,31 @@ description: Install a version of python then call pip install and report what w
 inputs:
   python-version:
     description: Python version to install, default is from Dockerfile
-    default: "dev"
+    default: "dev_container"
   pip-install:
     description: Parameters to pass to pip install
     default: "$([ -f dev-requirements.txt ] && echo '-c dev-requirements.txt') -e .[dev]"
+  docker-image:
+    description: The docker image used on a dev install
+    default: ""
 
 runs:
   using: composite
   steps:
-    - name: Get version of python
-      run: |
-        PYTHON_VERSION="${{ inputs.python-version }}"
-        if [ $PYTHON_VERSION == "dev" ]; then
-          PYTHON_VERSION="3.11"
-        fi
-        echo "PYTHON_VERSION=$PYTHON_VERSION" >> "$GITHUB_ENV"
-      shell: bash
-
     - name: Setup python
       uses: actions/setup-python@v5
       with:
-        python-version: ${{ env.PYTHON_VERSION }}
+        python-version: ${{ inputs.python-version }}
+      if: inputs.python-version != 'dev_container'
 
     - name: Install packages
       run: pip install ${{ inputs.pip-install }}
       shell: bash
+      if: inputs.python-version != 'dev_container'
+    
+    - name: Run docker container
+      run: docker run -d --name my-container ${{ inputs.docker-image }}
+      if: inputs.python-version == 'dev_container'
 
     - name: Report what was installed
       run: pip freeze
