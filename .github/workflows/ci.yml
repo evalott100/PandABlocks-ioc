@@ -18,6 +18,7 @@ jobs:
   test:
     needs: check
     if: needs.check.outputs.branch-pr == ''
+    runs-on: ${{ matrix.runs-on }}
     strategy:
       matrix:
         runs-on: ["ubuntu-latest"] # can add windows-latest, macos-latest

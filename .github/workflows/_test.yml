@@ -32,7 +32,7 @@ jobs:
         name: Install dev_container versions of python packages
         uses: ./.github/actions/install_requirements
         with:
-          docker-image: : ${{ github.event.inputs.docker-image }}
+          docker-image: ${{ github.event.inputs.docker-image }}
 
       - if: inputs.python-version == 'dev_container'
         name: Write the requirements as an artifact
